@@ -76,12 +76,19 @@ const oauthLimiter = rateLimit(15 * 60 * 1000, 20);
 const mutationLimiter = rateLimit(15 * 60 * 1000, 60);
 const repoLimiter = rateLimit(15 * 60 * 1000, 60);
 
-app.get("/", (_req, res) => res.json({
-  service: "RepoLens API",
-  version: "0.9.0",
-  status: "ok",
-  endpoints: ["/api/health", "/auth/github", "/api/me", "/api/monitors", "/api/notifications"]
-}));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.resolve(__dirname, "../dist");
+
+app.get("/", (_req, res, next) => {
+  if (isProduction && fs.existsSync(distPath)) return next();
+  res.json({
+    service: "RepoLens API",
+    version: "0.9.0",
+    status: "ok",
+    endpoints: ["/api/health", "/auth/github", "/api/me", "/api/monitors", "/api/notifications"]
+  });
+});
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "repolens-api", version: "0.9.0" }));
 
@@ -293,9 +300,6 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   res.status(500).json({ error: "An unexpected server error occurred." });
 });
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const distPath = path.resolve(__dirname, "../dist");
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath, { index: "index.html" }));
   app.get("*", (req, res, next) => {
