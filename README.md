@@ -1,136 +1,252 @@
-# RepoLens v0.9.1 — V13 Final Student Demo (Corrected)
+<div align="center">
 
-V13 adds per-repository pinning from analysis pages, private signed-in search history, individual history deletion, and clear-all history. The corrected V13 checkpoint also sends session cookies with repository-analysis requests and refreshes authentication when returning to the app through browser history, fixing history recording and false signed-out states. It also adds basic production hardening: security headers, request-size limits, lightweight API rate limiting, server-side repository validation, production environment checks, and production webhook-secret enforcement.
+# RepoLens
 
-This is a student project/demo. GitHub handles authentication; RepoLens does not handle GitHub passwords. Public repositories can be analyzed without signing in. Search history is only recorded for signed-in users after a successful analysis. One row is kept per repository and its last-visited time is updated.
+### 🔎 See beyond the repository.
 
-For a student deployment, the JSON store is suitable for a single persistent server/demo. If your hosting platform uses an ephemeral filesystem, use its persistent disk or move the store to a database before relying on user data across redeploys.
+**RepoLens is a GitHub repository intelligence platform that turns scattered repository data into one focused, visual overview.**
 
-# RepoLens V0.8.0 — Performance & UI Polish
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-RepoLens-111111?style=for-the-badge&logo=railway&logoColor=F4C95D)](https://repolens-production-5ada.up.railway.app)
+[![GitHub](https://img.shields.io/badge/Source-GitHub-111111?style=for-the-badge&logo=github&logoColor=white)](https://github.com/SwarajAmbawade/RepoLens)
 
-RepoLens now has the beginning of the actual SaaS layer.
+</div>
 
+---
 
-## V12 changes
+## 🧭 What is RepoLens?
 
-- Repository analysis now starts independent GitHub requests in parallel.
-- Weekly/monthly/yearly commit data uses the lighter participation endpoint instead of waiting on commit_activity generation.
-- In-flight repository requests are deduplicated and cached for five minutes.
-- Recent contributors show their latest observed commit date without additional per-contributor API calls.
-- Repository snapshot uses plain-language facts instead of opaque 0–100 signal scores.
-- Landing-page feature cards animate into view with staggered timing.
-- Navbar brand now returns to the home screen; redundant API/project links were removed.
-- Footer includes the author's GitHub, optional portfolio URL, source link, and build year.
+Understanding an unfamiliar GitHub repository usually means jumping between repository details, commits, contributors, issues, pull requests, languages, and activity graphs.
 
-## Architecture
+**RepoLens brings those signals together in one place.**
+
+Enter a public repository:
 
 ```text
-Browser
-  │
-  ├── Public repository analysis
-  │       ↓
-  │   RepoLens API
-  │       ↓
-  │   GitHub API
-  │
-  └── GitHub sign-in
-          ↓
-      RepoLens API
-          ↓
-      User session
-          ↓
-      Workspace
-          ↓
-      Pinned repositories
-          ↓
-      Monitoring / notifications
+facebook/react
 ```
 
-## Repository statistics compatibility
+and RepoLens creates a structured overview of its:
 
-RepoLens handles GitHub repository statistics edge cases explicitly:
+- ⭐ Stars and forks
+- 📝 Issues and pull requests
+- 💻 Languages
+- 👥 Contributors
+- 🔨 Recent commits
+- 📈 Development activity
+- 📅 Daily / Weekly / Monthly / Yearly commit trends
+- 📌 Personal pinned repositories
+- 🕘 Private signed-in search history
 
-- `202 Accepted`: retries while GitHub computes the statistics.
-- `204 No Content`: treats the statistics as unavailable instead of crashing.
-- `422 Validation Failed`: GitHub uses this for `commit_activity` on repositories with 10,000+ commits, so RepoLens falls back to `stats/participation`.
-- Temporary statistics failures: falls back to recent commit timestamps so a repository can still be analyzed.
+The idea is simple:
 
-GitHub documents the 10,000-commit limitation and the `participation` endpoint in its repository statistics API documentation.
+> **Understand a repository before diving into the code.**
 
-## What V6 implements
+---
 
-### GitHub sign-in foundation
+## ✨ Features
 
-The server has the GitHub OAuth web flow:
+### 🔍 Repository Analysis
 
-1. User clicks **Sign in with GitHub**
-2. RepoLens generates an OAuth state value
-3. GitHub authorizes the user
-4. GitHub redirects to the callback
-5. RepoLens verifies the state
-6. RepoLens fetches the GitHub profile
-7. RepoLens creates/updates a local user
-8. RepoLens issues an HttpOnly session cookie
+Public repositories can be analyzed without signing in.
 
-GitHub documents the web authorization-code flow for this use case. For production monitoring, GitHub's documentation recommends considering a GitHub App because Apps provide finer-grained permissions and are better suited to automation.
+RepoLens collects repository information through the GitHub API and presents it through a single dashboard.
 
-### User workspace
+### 📊 Development Activity
+
+Explore repository activity through:
+
+**Daily · Weekly · Monthly · Yearly**
+
+The activity data is fetched efficiently and the different views are derived locally instead of triggering a new GitHub request every time the range changes.
+
+### 👥 Contributor Explorer
+
+Explore repository contributors through focused views:
+
+- **Top**
+- **Recent**
+- **Most active**
+- **New**
+- **Bots**
+
+### 📌 Personal Workspace
+
+GitHub sign-in unlocks the personal workspace.
 
 Signed-in users can:
 
-- see their GitHub identity
-- open their workspace
-- pin public repositories
-- remove pinned repositories
-- analyze a pinned repository
-- see the notification area
+- Pin repositories
+- Unpin repositories
+- View analyzed repository history
+- Delete individual history entries
+- Clear all history
+- Revisit previously analyzed repositories
 
-### Monitoring foundation
+Repeated analysis of the same repository updates its existing history entry instead of creating duplicates.
 
-The server has:
+### 🔐 GitHub Authentication
 
-```text
-POST /webhooks/github
-```
+RepoLens uses GitHub OAuth for authentication.
 
-with HMAC signature verification when `GITHUB_WEBHOOK_SECRET` is configured.
-
-The endpoint is deliberately not pretending to be a finished monitoring system yet.
-
-## Why the monitoring implementation is not "poll every repository"
-
-For a SaaS product, repeatedly polling every monitored repository does not scale well.
-
-GitHub webhooks deliver event payloads to a server when subscribed events happen. The intended production architecture is:
+The flow is:
 
 ```text
-GitHub App
-    ↓
-Webhook
-    ↓
-RepoLens event processor
-    ↓
-Database
-    ↓
-Notification service
-    ↓
-In-app / email / Slack / Discord
+User
+  ↓
+GitHub OAuth
+  ↓
+Authorization callback
+  ↓
+OAuth state verification
+  ↓
+GitHub profile
+  ↓
+RepoLens user
+  ↓
+HttpOnly session
 ```
 
-GitHub repository webhooks require appropriate repository ownership/admin permissions. A GitHub App is therefore the right production direction for repository monitoring.
+RepoLens does **not** handle GitHub passwords.
 
-## Local setup
+The current OAuth flow requests the `read:user` scope required for the workspace.
 
-Install (this also refreshes the lockfile for the new SaaS dependencies):
+---
+
+## ⚡ GitHub API Efficiency
+
+GitHub API usage was treated as a core architectural concern.
+
+RepoLens includes:
+
+- Parallel independent GitHub requests
+- Five-minute repository caching
+- In-flight request deduplication
+- Local activity-range derivation
+- Bounded issue / pull-request history
+- Repository statistics fallbacks
+- Lightweight API rate limiting
+
+### Repository statistics handling
+
+GitHub repository statistics can be asynchronous or unavailable for certain repositories.
+
+RepoLens explicitly handles cases including:
+
+```text
+202 Accepted
+204 No Content
+422 Validation Failed
+```
+
+For repositories where `commit_activity` cannot be used, RepoLens can fall back to participation statistics rather than breaking the complete repository analysis.
+
+---
+
+## 🏗️ Architecture
+
+```text
+                         ┌──────────────────────┐
+                         │       Browser        │
+                         │   React + Vite       │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │   Express Server     │
+                         │   API + OAuth        │
+                         └─────────┬────┬────────┘
+                                   │    │
+                    ┌──────────────┘    └──────────────┐
+                    ▼                                  ▼
+          ┌───────────────────┐              ┌───────────────────┐
+          │     GitHub API    │              │    PostgreSQL     │
+          │                   │              │                   │
+          │ Repo data         │              │ Users             │
+          │ Activity          │              │ Pins              │
+          │ Contributors      │              │ History           │
+          │ Issues / PRs      │              │ Workspace data    │
+          └───────────────────┘              └───────────────────┘
+```
+
+### Production
+
+```text
+GitHub Repository
+       │
+       ▼
+    Railway
+       │
+       ├── RepoLens
+       │     ├── React production build
+       │     ├── Express API
+       │     └── GitHub OAuth
+       │
+       └── PostgreSQL
+```
+
+The production Express server serves the Vite `dist` output, so the frontend and API share a single origin.
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React, TypeScript, Vite |
+| Styling | CSS |
+| Backend | Node.js, Express, TypeScript |
+| Database | PostgreSQL |
+| Local persistence | JSON store |
+| Authentication | GitHub OAuth |
+| Sessions | HttpOnly session cookies |
+| External API | GitHub REST API |
+| Deployment | Railway |
+| Production database | Railway PostgreSQL |
+
+---
+
+## 🔒 Security & Hardening
+
+RepoLens includes practical production hardening appropriate for the current student deployment:
+
+- Security headers
+- JSON request-size limits
+- Lightweight API rate limiting
+- Server-side repository validation
+- Production environment validation
+- OAuth state verification
+- HttpOnly session cookies
+- Production webhook-secret enforcement
+- Secrets stored through environment variables
+- GitHub passwords never handled by RepoLens
+- GitHub OAuth access tokens not stored in the local JSON database
+
+**Never commit `.env` or any secret credentials to the repository.**
+
+---
+
+## 🧪 Local Development
+
+### 1. Clone
+
+```bash
+git clone https://github.com/SwarajAmbawade/RepoLens.git
+cd RepoLens
+```
+
+### 2. Install
 
 ```bash
 npm install
 ```
 
+### 3. Configure environment variables
+
 Create `.env`:
 
 ```env
 PORT=8787
+
 APP_BASE_URL=http://localhost:5173
 API_BASE_URL=http://localhost:8787
 
@@ -140,10 +256,11 @@ GITHUB_CLIENT_SECRET=
 GITHUB_CALLBACK_URL=http://localhost:8787/auth/github/callback
 
 SESSION_SECRET=replace-with-a-long-random-secret
+
 DATA_FILE=./data/repolens.json
 ```
 
-Then:
+### 4. Start
 
 ```bash
 npm run dev
@@ -155,17 +272,19 @@ Frontend:
 http://localhost:5173
 ```
 
-API:
+Backend:
 
 ```text
 http://localhost:8787
 ```
 
-## GitHub OAuth setup
+---
 
-Create a GitHub OAuth App in GitHub Developer Settings.
+## 🔑 GitHub OAuth Setup
 
-Use:
+Create a GitHub OAuth App from GitHub Developer Settings.
+
+For local development:
 
 ```text
 Application URL:
@@ -175,107 +294,125 @@ Authorization callback URL:
 http://localhost:8787/auth/github/callback
 ```
 
-Put its client ID and client secret in `.env`.
-
-Do not commit `.env`.
-
-The V6 login requests `read:user` and does not request the broad `repo` scope.
-
-## Important V6 limitation
-
-The local JSON store is intentionally a development-only persistence layer:
+For production, use:
 
 ```text
-data/repolens.json
+https://YOUR-RAILWAY-DOMAIN/auth/github/callback
 ```
 
-It keeps the project easy to understand and run.
+Keep the GitHub client secret and other credentials inside environment variables.
 
-Before production, replace it with a real database and encrypted credential/token storage.
+For the project's OAuth setup details, see:
 
-The GitHub OAuth access token is intentionally NOT stored in this JSON store.
+[`GITHUB_OAUTH_SETUP.md`](./GITHUB_OAUTH_SETUP.md)
 
-## Next production steps
+---
 
-1. GitHub App registration
-2. App installation flow
-3. Installation/repository permission mapping
-4. Real database
-5. Encrypted token storage
-6. Webhook event processor
-7. Notification preferences
-8. Background jobs / retry queue
-9. In-app notification center
-10. Email/Slack/Discord delivery
-11. Team/workspace roles
-12. Billing/plan limits
+## ☁️ Deployment
 
-## V0.6.1 completion fixes
+RepoLens is deployed using **Railway**.
 
-- Repository analytics keeps the direct `GET /repos/{owner}/{repo}` lookup.
-- GitHub API status codes are now preserved instead of converting every failure into `502`.
-- GitHub rate-limit headers are returned by the API error path.
-- GitHub analytics no longer silently turns commit/contributor failures into empty data.
-- Added `/api/github/status` for local authentication/rate-limit diagnostics without exposing the token.
-- Search/API failures are surfaced as actual GitHub errors rather than being labelled "Repository not found".
+Production uses PostgreSQL when `DATABASE_URL` is available.
 
+The production service requires the appropriate:
 
-### GitHub repository statistics
+- GitHub OAuth credentials
+- Session secret
+- Application URL
+- OAuth callback URL
+- PostgreSQL connection string
+- GitHub API token
 
-GitHub computes some repository statistics asynchronously. RepoLens now retries `stats/commit_activity` when GitHub returns HTTP 202 and falls back to `stats/participation` if the statistics job is still pending, so a repository analysis does not fail with `weeks is not iterable`.
+The deployed application uses one origin for both the React frontend and Express API.
 
-## V0.7.0 — Cached activity architecture
+Deployment notes:
 
-The activity dashboard no longer treats Daily / Weekly / Monthly / Yearly as four separate GitHub API queries. RepoLens fetches a bounded raw activity dataset once, caches it per repository for 5 minutes, and derives all four chart views locally.
+[`RAILWAY_DEPLOYMENT.md`](./RAILWAY_DEPLOYMENT.md)
 
-### What changed
+---
 
-- No GitHub request when the user toggles Daily / Weekly / Monthly / Yearly.
-- Repository metadata, languages, contributors, commit statistics, recent commits, and issue/PR history are cached together.
-- `stats/commit_activity` is retried for GitHub's asynchronous `202` response and falls back to `stats/participation` for the documented `422` large-repository case.
-- PR and issue activity no longer uses GitHub Search API. RepoLens uses the repository Issues endpoint and identifies pull requests through GitHub's `pull_request` field.
-- Issue/PR history is bounded to the last 365 days and at most 1,000 records per refresh. If that bound is reached, the API reports `issueHistoryTruncated: true` instead of pretending the history is complete.
-- A small request gap is used while paging issue history to avoid creating a request burst.
-- The frontend switches activity ranges entirely in memory after the first analysis.
-
-### Data flow
+## 📁 Project Structure
 
 ```text
-First repository analysis
-        ↓
-GitHub
-  ├─ repository metadata
-  ├─ languages
-  ├─ contributors
-  ├─ weekly commit statistics
-  ├─ recent commits
-  └─ issues + pull requests
-        ↓
-RepoLens repository cache (5 min)
-        ↓
-Raw activity dataset
-        ↓
-Daily / Weekly / Monthly / Yearly
-        ↓
-Frontend toggles locally — no GitHub request
+RepoLens/
+│
+├── src/                    # React frontend
+├── server/                 # Express backend
+├── public/                 # Static assets
+├── data/                   # Local development data
+│
+├── .env.example            # Environment variable reference
+├── GITHUB_OAUTH_SETUP.md   # GitHub OAuth setup
+├── RAILWAY_DEPLOYMENT.md   # Railway deployment notes
+├── package.json
+├── package-lock.json
+├── tsconfig.json
+├── vite.config.ts
+└── README.md
 ```
 
-The yearly chart is intentionally marked as limited because GitHub's repository statistics endpoint provides about 52 weeks of commit history. RepoLens does not invent older history.
+---
 
-For the step-by-step GitHub OAuth setup, see [`GITHUB_OAUTH_SETUP.md`](./GITHUB_OAUTH_SETUP.md).
+## 🎯 Project Goal
 
-## Railway deployment
+RepoLens was built around one practical question:
 
-RepoLens keeps the local JSON store for easy development, but uses PostgreSQL when `DATABASE_URL` is present. Railway can provision PostgreSQL and expose `DATABASE_URL` to the app.
+> **Can a developer understand the current state of a GitHub repository faster without manually opening multiple GitHub pages?**
 
-For production on Railway:
+The project focuses on combining repository data into a useful interface while keeping the architecture understandable enough to build, debug, deploy, and maintain as a student project.
 
-1. Deploy the repository as a Node/Express service.
-2. Add a PostgreSQL service to the same Railway project.
-3. Set `DATABASE_URL=${{Postgres.DATABASE_URL}}` on the RepoLens service.
-4. Set the GitHub OAuth and server secrets from `.env.example` as Railway Variables.
-5. Set `APP_BASE_URL` to the final Railway HTTPS domain.
-6. Set `GITHUB_CALLBACK_URL` to `<APP_BASE_URL>/auth/github/callback`.
-7. Generate the Railway public domain and test `/api/health` before testing GitHub OAuth.
+---
 
-The production service serves the Vite `dist` output from Express, so the browser and API share one origin. The frontend automatically uses the current origin in production; `VITE_API_BASE_URL` is only needed when running the frontend and API on separate origins during development.
+## 🔮 Future Direction
+
+The current release is intentionally scoped as a completed student project.
+
+If RepoLens is expanded in the future, possible directions include:
+
+- GitHub App based repository monitoring
+- Event-driven webhook processing
+- Background jobs and retry queues
+- Advanced repository comparisons
+- Team workspaces
+- More notification integrations
+- Deeper repository health analysis
+
+These are future possibilities, not requirements for the current release.
+
+---
+
+## 📌 Project Status
+
+**Completed · Deployed · Working**
+
+RepoLens currently includes:
+
+- Public repository analysis
+- GitHub API integration
+- Activity analytics
+- Contributor exploration
+- GitHub OAuth
+- Personal workspace
+- Repository pinning
+- Private search history
+- PostgreSQL persistence
+- Production hardening
+- Railway deployment
+
+---
+
+## 👨‍💻 Author
+
+**Swaraj Ambawade**
+
+[GitHub](https://github.com/SwarajAmbawade)
+
+---
+
+<div align="center">
+
+### Built with React · TypeScript · Node.js · Express · PostgreSQL · GitHub API
+
+**RepoLens — See beyond the repository.**
+
+</div>
